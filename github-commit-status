@@ -1,0 +1,107 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require "ostruct"
+require "pp"
+require 'uri'
+require 'net/http'
+require 'json'
+
+passed_options = {}
+repo_details = {}
+
+pp ENV
+
+opts = OptionParser.new do |opts|
+  opts.separator ""
+  opts.separator "Additional details on API limitations and parameters values can be found here: https://developer.github.com/v3/repos/statuses/"
+  opts.separator "Note that HTTTPS is forced for the request."
+  opts.separator ""
+  opts.separator "Required:"
+
+  opts.on("-s", "--state STATE", "Commit state. Can be one of: success, failure, pending, failed.") do |state|
+    passed_options["state"] = state
+  end
+
+  opts.on("-h", "--hash [COMMIT SHA]", "Commit hash.") do |sha|
+    repo_details[:sha] = sha
+  end
+
+  opts.on("-r", "--repo [REPOSITORY OWNER/NAME]", "Repository owner and name. Example: MyCompany/MyRepo.") do |repo|
+    repo_details[:repository] = repo
+  end
+
+  opts.on("-u", "--user [GITHUB USER NAME]", "A GitHub user name.") do |sha|
+    repo_details[:user] = sha
+  end
+
+  opts.on("-a", "--api-token [GITHUB API TOKEN]", "A GitHub API token. Can also be passed through the GITHUB_API_TOKEN environment variable.") do |token|
+    repo_details[:token] = token
+  end
+
+  opts.separator ""
+  opts.separator "Optional:"
+
+  opts.on("-d", "--description [DESCRIPTION]", "Commit status description.") do |desc|
+    passed_options["description"] = desc
+  end
+
+  opts.on("-c", "--context [CONTEXT]", "Commit status update context.") do |context|
+    passed_options["context"] = context
+  end
+
+  opts.on("-t", "--target_url [URL]", "An URL to associate with status.") do |url|
+    passed_options["target_url"] = url
+  end
+
+  opts.separator ""
+  opts.separator "Common options:"
+
+  opts.on_tail("--help", "Show this message") do
+    puts opts
+    exit
+  end
+end.parse!(ARGV)
+
+# check mandatory passed_options and thow exception if any is missing
+
+required = {}
+required["state"] = passed_options.fetch("state") do
+  raise OptionParser::MissingArgument, "state is required"
+end
+
+required["sha"] = repo_details.fetch(:sha) do
+  raise OptionParser::MissingArgument, "SHA is required"
+end
+
+required["repository"] = repo_details.fetch(:repository) do
+  raise OptionParser::MissingArgument, "repository is required"
+end
+
+required["user"] = repo_details.fetch(:user) do
+  raise OptionParser::MissingArgument, "user name is required"
+end
+
+required["token"] = repo_details.fetch(:token) do
+  required["token"] = ENV.fetch("GITHUB_API_TOKEN") do
+    raise OptionParser::MissingArgument, "GitHub API Token is required"
+  end
+  repo_details[:token] = ENV["GITHUB_API_TOKEN"]
+end
+
+# perform a request
+
+uri = URI("https://api.github.com/repos/#{repo_details[:repository]}/statuses/#{repo_details[:sha]}")
+https = Net::HTTP.new(uri.host, uri.port)
+https.use_ssl = true
+
+request = Net::HTTP::Post.new(uri.path)
+request.basic_auth repo_details[:user], repo_details[:token]
+request.body = passed_options.to_json
+
+response = https.request(request)
+pp response
+
+status_code = response.code.to_i
+
+exit(status_code) if status_code != 201
