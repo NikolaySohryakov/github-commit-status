@@ -10,8 +10,6 @@ require 'json'
 passed_options = {}
 repo_details = {}
 
-pp ENV
-
 opts = OptionParser.new do |opts|
   opts.separator ""
   opts.separator "Additional details on API limitations and parameters values can be found here: https://developer.github.com/v3/repos/statuses/"
